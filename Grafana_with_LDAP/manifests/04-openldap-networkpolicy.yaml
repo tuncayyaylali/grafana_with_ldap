@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grafana-to-openldap
+  namespace: identity
+spec:
+  podSelector:
+    matchLabels:
+      app: openldap
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: grafana
+    ports:
+    - protocol: TCP
+      port: 389
+  - from:
+    - podSelector:
+        matchLabels:
+          app: phpldapadmin
+    ports:
+    - protocol: TCP
+      port: 389

@@ -1,0 +1,72 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "gauge",
+      "title": "Hassas Sunucu Kaynak Kullanımı",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "datasource": { "type": "testdata", "uid": "grafana" },
+      "targets": [
+        {
+          "datasource": { "type": "testdata", "uid": "grafana" },
+          "refId": "A",
+          "scenarioId": "random_walk"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Kritik Güvenlik Alarmları (Admin)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "datasource": { "type": "testdata", "uid": "grafana" },
+      "targets": [
+        {
+          "datasource": { "type": "testdata", "uid": "grafana" },
+          "refId": "A",
+          "scenarioId": "random_walk"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["admin", "security"],
+  "time": { "from": "now-15m", "to": "now" },
+  "title": "Yönetici & Güvenlik Paneli (Sadece Admin)",
+  "uid": "admin-security-overview"
+}

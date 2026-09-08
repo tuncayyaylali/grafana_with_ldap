@@ -1,0 +1,23 @@
+adminPassword: "admin"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+persistence:
+  enabled: false
+
+ldap:
+  enabled: true
+  existingSecret: "grafana-ldap-secret"
+  subPath: "ldap.toml"
+
+grafana.ini:
+  auth.ldap:
+    enabled: true
+    config_file: /etc/grafana/ldap.toml
+    allow_sign_up: true

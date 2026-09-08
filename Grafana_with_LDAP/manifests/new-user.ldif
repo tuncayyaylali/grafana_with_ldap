@@ -1,0 +1,17 @@
+dn: uid=cgreen,ou=users,dc=example,dc=org
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: cgreen
+cn: Clara Green
+cn: cn=grafana-editors,ou=groups,dc=example,dc=org
+sn: Green
+givenName: Clara
+mail: cgreen@example.org
+userPassword: password123
+
+dn: cn=grafana-editors,ou=groups,dc=example,dc=org
+changetype: modify
+add: member
+member: uid=cgreen,ou=users,dc=example,dc=org

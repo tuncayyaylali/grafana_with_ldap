@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpldapadmin
+  namespace: identity
+  labels:
+    app: phpldapadmin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phpldapadmin
+  template:
+    metadata:
+      labels:
+        app: phpldapadmin
+    spec:
+      containers:
+      - name: phpldapadmin
+        image: osixia/phpldapadmin:0.9.0
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: PHPLDAPADMIN_LDAP_HOSTS
+          value: "openldap.identity.svc.cluster.local"
+        - name: PHPLDAPADMIN_HTTPS
+          value: "false"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        ports:
+        - containerPort: 80
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phpldapadmin
+  namespace: identity
+  labels:
+    app: phpldapadmin
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  selector:
+    app: phpldapadmin

@@ -1,0 +1,162 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openldap-admin-secret
+  namespace: identity
+type: Opaque
+stringData:
+  admin-password: "adminpassword"
+  config-password: "configpassword"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openldap-seed-ldif
+  namespace: identity
+data:
+  seed.ldif: |
+    # Organizational Units
+    dn: ou=users,dc=example,dc=org
+    objectClass: top
+    objectClass: organizationalUnit
+    ou: users
+
+    dn: ou=groups,dc=example,dc=org
+    objectClass: top
+    objectClass: organizationalUnit
+    ou: groups
+
+    # Users
+    dn: uid=jdoe,ou=users,dc=example,dc=org
+    objectClass: top
+    objectClass: person
+    objectClass: organizationalPerson
+    objectClass: inetOrgPerson
+    uid: jdoe
+    cn: John Doe
+    cn: cn=grafana-admins,ou=groups,dc=example,dc=org
+    sn: Doe
+    givenName: John
+    mail: jdoe@example.org
+    userPassword: password123
+
+    dn: uid=asmith,ou=users,dc=example,dc=org
+    objectClass: top
+    objectClass: person
+    objectClass: organizationalPerson
+    objectClass: inetOrgPerson
+    uid: asmith
+    cn: Alice Smith
+    cn: cn=grafana-editors,ou=groups,dc=example,dc=org
+    sn: Smith
+    givenName: Alice
+    mail: asmith@example.org
+    userPassword: password123
+
+    dn: uid=bjones,ou=users,dc=example,dc=org
+    objectClass: top
+    objectClass: person
+    objectClass: organizationalPerson
+    objectClass: inetOrgPerson
+    uid: bjones
+    cn: Bob Jones
+    cn: cn=grafana-viewers,ou=groups,dc=example,dc=org
+    sn: Jones
+    givenName: Bob
+    mail: bjones@example.org
+    userPassword: password123
+
+    # Groups
+    dn: cn=grafana-admins,ou=groups,dc=example,dc=org
+    objectClass: top
+    objectClass: groupOfNames
+    cn: grafana-admins
+    member: uid=jdoe,ou=users,dc=example,dc=org
+
+    dn: cn=grafana-editors,ou=groups,dc=example,dc=org
+    objectClass: top
+    objectClass: groupOfNames
+    cn: grafana-editors
+    member: uid=asmith,ou=users,dc=example,dc=org
+
+    dn: cn=grafana-viewers,ou=groups,dc=example,dc=org
+    objectClass: top
+    objectClass: groupOfNames
+    cn: grafana-viewers
+    member: uid=bjones,ou=users,dc=example,dc=org
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openldap
+  namespace: identity
+  labels:
+    app: openldap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openldap
+  template:
+    metadata:
+      labels:
+        app: openldap
+    spec:
+      containers:
+      - name: openldap
+        image: osixia/openldap:1.5.0
+        imagePullPolicy: IfNotPresent
+        args: ["--copy-service"]
+        env:
+        - name: LDAP_ORGANISATION
+          value: "Example Org"
+        - name: LDAP_DOMAIN
+          value: "example.org"
+        - name: LDAP_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: openldap-admin-secret
+              key: admin-password
+        - name: LDAP_CONFIG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: openldap-admin-secret
+              key: config-password
+        - name: LDAP_BASE_DN
+          value: "dc=example,dc=org"
+        - name: LDAP_TLS
+          value: "false"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        ports:
+        - containerPort: 389
+          name: ldap
+        volumeMounts:
+        - name: seed-ldif-volume
+          mountPath: /container/service/slapd/assets/config/bootstrap/ldif/custom/seed.ldif
+          subPath: seed.ldif
+      volumes:
+      - name: seed-ldif-volume
+        configMap:
+          name: openldap-seed-ldif
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openldap
+  namespace: identity
+  labels:
+    app: openldap
+spec:
+  type: ClusterIP
+  ports:
+  - port: 389
+    targetPort: 389
+    name: ldap
+  selector:
+    app: openldap

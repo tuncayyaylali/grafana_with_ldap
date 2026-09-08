@@ -1,0 +1,17 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary runtime logs and directories
+*.log
+scratch/
+tmp/
+.temp/
+*.pid
