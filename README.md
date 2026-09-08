@@ -19,13 +19,14 @@ This document provides a comprehensive, production-grade guide for deploying and
 5. Automated CLI Verification
 6. Grafana UI Verification and Role-Based Access Testing
 7. Dashboard Management and Folder-Level Permissions
-   - Importing General and Restricted Dashboards
+   - Importing General Dashboards and Admin Dashboards
    - Configuring Folder Access Control Lists (ACLs)
    - Verifying Dashboard Visibility Across Roles
 8. Dynamic LDAP User Management
-   - Adding Users via Command Line (LDIF)
-   - Managing Directory Entries via phpLDAPadmin GUI
-   - Verifying New Admin User in Grafana
+   - Method 1: Adding Users Dynamically via CLI Here-Doc (Admin: tyaylali)
+   - Method 2: Applying LDIF Template File (Editor: cgreen)
+   - Method 3: Directory Management via phpLDAPadmin GUI (Viewer: jsmith)
+   - Verifying the New Users in Grafana
 9. Teardown and Cleanup
 10. Complete Manifests, Configurations, and Source Code
 
@@ -151,7 +152,7 @@ Testing: 'bjones' (Expected Role: Viewer) -> SUCCESS! (HTTP 200, Role: Viewer)
 Testing: Invalid password authentication for 'jdoe' -> SUCCESS! (HTTP 401 Unauthorized)
 
 All verification tests passed successfully!
-==> Cleaning up port-forward process (PID: 8587)...
+==> Cleaning up port-forward process (PID: 6865)...
 ```
 
 ---
@@ -219,19 +220,19 @@ Sign in as `jdoe` (Admin):
 
 ### B. Dashboard Import
 
-1. **Import the General Overview Dashboard:**
+1. **Import the General Dashboards Panel:**
    - Navigate to `Dashboards > New > Import`.
    - Upload `dashboards/general-dashboard.json`.
    - Under **Folder**, select `General Dashboards` and click **Import**.
 
-2. **Import the Restricted Security Dashboard:**
+2. **Import the Admin Dashboards Panel:**
    - Navigate to `Dashboards > New > Import`.
    - Upload `dashboards/admin-dashboard.json`.
    - Under **Folder**, select `Admin Dashboards` and click **Import**.
 
 ### C. Folder Access Verification Across Roles
 
-- **Signed in as `jdoe` (Admin):** Both folders (`General Dashboards` and `Admin Dashboards`) and their respective dashboards are fully visible and editable.
+- **Signed in as `jdoe` (Admin):** Both folders (`General Dashboards` and `Admin Dashboards`) and their respective panels are fully visible and editable.
 - **Signed in as `asmith` (Editor):** The `Admin Dashboards` folder is completely hidden from dashboard listings and search. `General Dashboards` is visible and editable.
 - **Signed in as `bjones` (Viewer):** Only `General Dashboards` is visible in read-only mode. The `Admin Dashboards` folder is hidden. Direct browser navigation to `/d/admin-security-overview` yields `Access Denied` / `Dashboard not found`.
 
@@ -239,11 +240,11 @@ Sign in as `jdoe` (Admin):
 
 ## 8. Dynamic LDAP User Management
 
-### Method 1: Adding Users via CLI (LDIF)
+### Method 1: Adding Users Dynamically via CLI Here-Doc (Admin: `tyaylali`)
 
-New users can be dynamically provisioned into the running OpenLDAP instance without pod restarts using `ldapadd`.
+New users can be dynamically provisioned into the running OpenLDAP instance without pod restarts using `kubectl exec` and `ldapadd`. 
 
-Example: Adding a new administrator account (`tyaylali`):
+The following command creates the administrator account `tyaylali` and assigns it to `grafana-admins`:
 
 ```bash
 kubectl exec -i deployment/openldap -n identity -- ldapadd -x -D "cn=admin,dc=example,dc=org" -w "adminpassword" << 'EOF'
@@ -269,7 +270,33 @@ member: uid=tyaylali,ou=users,dc=example,dc=org
 EOF
 ```
 
-### Method 2: Directory Management via phpLDAPadmin GUI
+Expected terminal output:
+```text
+adding new entry "uid=tyaylali,ou=users,dc=example,dc=org"
+modifying entry "cn=grafana-admins,ou=groups,dc=example,dc=org"
+```
+
+---
+
+### Method 2: Applying LDIF Template File (Editor: `cgreen`)
+
+Pre-defined LDIF files can be piped directly into `ldapadd`. The repository includes `manifests/new-user.ldif` which creates an Editor account `cgreen` (Clara Green) and assigns it to `grafana-editors`:
+
+```bash
+kubectl exec -i deployment/openldap -n identity -- ldapadd -x -D "cn=admin,dc=example,dc=org" -w "adminpassword" < manifests/new-user.ldif
+```
+
+Expected terminal output:
+```text
+adding new entry "uid=cgreen,ou=users,dc=example,dc=org"
+modifying entry "cn=grafana-editors,ou=groups,dc=example,dc=org"
+```
+
+---
+
+### Method 3: Directory Management via phpLDAPadmin GUI (Viewer: `jsmith`)
+
+New users can also be created graphically without terminal access:
 
 1. Start port-forwarding to phpLDAPadmin:
    ```bash
@@ -279,17 +306,60 @@ EOF
 3. Sign in:
    - **Login DN:** `cn=admin,dc=example,dc=org`
    - **Password:** `adminpassword`
-4. Expand `dc=example,dc=org` to browse `ou=users` and `ou=groups`.
-5. When creating users via GUI, avoid POSIX account templates (which demand numeric `gidNumber` values). Instead, select the **Default** template, choose the **`inetOrgPerson`** structural object class, and assign the Relative Distinguished Name (RDN) attribute to **`uid`**.
-6. Associate the newly created user DN (`uid=...,ou=users,dc=example,dc=org`) as a `member` attribute under the target group in `ou=groups`.
+4. In the left navigation tree, expand `dc=example,dc=org`, select `ou=users`, and click **Create a child entry**.
+5. Select the **Default** template (do not select "Generic: User Account", as POSIX templates mandate numeric GID numbers).
+6. Under structural object classes, select **`inetOrgPerson`** and proceed.
+7. Fill in the user details:
+   - **RDN:** Select `uid` from the dropdown and enter `jsmith`.
+   - **cn (Common Name):** `John Smith`
+   - **sn (Surname):** `Smith`
+   - **givenName:** `John`
+   - **mail:** `jsmith@example.org`
+   - **userPassword:** `password123` (choose `clear` or `sha` encryption)
+8. Click **Create Object**, then confirm with **Commit**.
+9. Once created, open `uid=jsmith`, click **Add new attribute**, choose **`cn`**, and enter `cn=grafana-viewers,ou=groups,dc=example,dc=org`.
+10. In the left tree, select `ou=groups > cn=grafana-viewers`. Click **Add new attribute** (or add value under `member`), and enter:
+    ```text
+    uid=jsmith,ou=users,dc=example,dc=org
+    ```
+    Click **Update Object**.
 
-### Verifying the New Admin User in Grafana
+---
 
-1. Navigate to `http://localhost:3000`.
-2. Sign in with the new credentials:
-   - **Username:** `tyaylali`
-   - **Password:** `password123`
-3. Confirm that Grafana grants the `Admin` role automatically, providing access to both `General Dashboards` and the restricted `Admin Dashboards` folder.
+### Verifying the New Users in Grafana
+
+Start port-forwarding Grafana if it is not already running:
+```bash
+kubectl port-forward svc/grafana 3000:80 -n monitoring
+```
+Navigate to `http://localhost:3000` to verify each user sequentially:
+
+1. **Verify `tyaylali` (Admin - created via Method 1):**
+   - **Username:** `tyaylali` | **Password:** `password123`
+   - REST API Verification:
+     ```bash
+     curl -s -u "tyaylali:password123" http://localhost:3000/api/user/orgs
+     ```
+     Output: `[{"orgId":1,"name":"Main Org.","role":"Admin"}]`
+   - UI Verification: Granted `Admin` role and Server Admin privileges. Can access both `General Dashboards` and the restricted `Admin Dashboards` folder.
+
+2. **Verify `cgreen` (Editor - created via Method 2):**
+   - **Username:** `cgreen` | **Password:** `password123`
+   - REST API Verification:
+     ```bash
+     curl -s -u "cgreen:password123" http://localhost:3000/api/user/orgs
+     ```
+     Output: `[{"orgId":1,"name":"Main Org.","role":"Editor"}]`
+   - UI Verification: Granted `Editor` role. Can create and modify dashboards inside `General Dashboards`. The `Admin Dashboards` folder is hidden from view.
+
+3. **Verify `jsmith` (Viewer - created via Method 3):**
+   - **Username:** `jsmith` | **Password:** `password123`
+   - REST API Verification:
+     ```bash
+     curl -s -u "jsmith:password123" http://localhost:3000/api/user/orgs
+     ```
+     Output: `[{"orgId":1,"name":"Main Org.","role":"Viewer"}]`
+   - UI Verification: Granted `Viewer` role. Can access `General Dashboards` in read-only mode (panels cannot be edited, saved, or created). The `Admin Dashboards` folder is hidden from view.
 
 ---
 
@@ -713,7 +783,7 @@ member: uid=cgreen,ou=users,dc=example,dc=org
   "panels": [
     {
       "type": "stat",
-      "title": "Sistem Sağlığı (Uptime)",
+      "title": "System Uptime",
       "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
       "id": 1,
       "datasource": { "type": "testdata", "uid": "grafana" },
@@ -740,7 +810,7 @@ member: uid=cgreen,ou=users,dc=example,dc=org
     },
     {
       "type": "timeseries",
-      "title": "Genel İstek Trafiği (RPS)",
+      "title": "Incoming Request Rate (RPS)",
       "gridPos": { "h": 6, "w": 16, "x": 8, "y": 0 },
       "id": 2,
       "datasource": { "type": "testdata", "uid": "grafana" },
@@ -756,9 +826,9 @@ member: uid=cgreen,ou=users,dc=example,dc=org
   "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["genel", "public"],
+  "tags": ["general", "public"],
   "time": { "from": "now-15m", "to": "now" },
-  "title": "Genel Servis Durumu (Herkese Açık)",
+  "title": "General Dashboards",
   "uid": "general-overview"
 }
 ```
@@ -775,7 +845,7 @@ member: uid=cgreen,ou=users,dc=example,dc=org
   "panels": [
     {
       "type": "gauge",
-      "title": "Hassas Sunucu Kaynak Kullanımı",
+      "title": "Privileged Resource Utilization",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "id": 1,
       "datasource": { "type": "testdata", "uid": "grafana" },
@@ -805,7 +875,7 @@ member: uid=cgreen,ou=users,dc=example,dc=org
     },
     {
       "type": "stat",
-      "title": "Kritik Güvenlik Alarmları (Admin)",
+      "title": "Critical Security Incidents (Admin)",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "id": 2,
       "datasource": { "type": "testdata", "uid": "grafana" },
@@ -834,7 +904,7 @@ member: uid=cgreen,ou=users,dc=example,dc=org
   "style": "dark",
   "tags": ["admin", "security"],
   "time": { "from": "now-15m", "to": "now" },
-  "title": "Yönetici & Güvenlik Paneli (Sadece Admin)",
+  "title": "Admin Dashboards",
   "uid": "admin-security-overview"
 }
 ```
